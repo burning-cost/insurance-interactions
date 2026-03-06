@@ -4,19 +4,19 @@ Uses CANN (Combined Actuarial Neural Network) and NID (Neural Interaction Detect
 to identify missing interaction terms in Poisson and Gamma GLMs.
 
 Primary interface:
-    InteractionDetector  — orchestrates the full CANN → NID → GLM test pipeline
-    CANN                 — the neural network skip-connection model
-    CANNConfig           — training hyperparameters
-    DetectorConfig       — full pipeline configuration
+    InteractionDetector  - orchestrates the full CANN → NID → GLM test pipeline
+    CANN                 - the neural network skip-connection model
+    CANNConfig           - training hyperparameters
+    DetectorConfig       - full pipeline configuration
 
 GLM integration:
-    test_interactions           — LR-test each candidate pair individually
-    build_glm_with_interactions — refit GLM with approved interactions
+    test_interactions           - LR-test each candidate pair individually
+    build_glm_with_interactions - refit GLM with approved interactions
 
 References:
-    Schelldorfer & Wüthrich (2019) — CANN architecture
-    Tsang, Cheng & Liu (2018) — NID weight-matrix scoring
-    Lindström & Palmquist (2023) — CANN+NID applied to insurance GLMs
+    Schelldorfer & Wüthrich (2019) - CANN architecture
+    Tsang, Cheng & Liu (2018) - NID weight-matrix scoring
+    Lindström & Palmquist (2023) - CANN+NID applied to insurance GLMs
 """
 
 from .cann import CANN, CANNConfig

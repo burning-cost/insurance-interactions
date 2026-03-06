@@ -232,7 +232,7 @@ def test_interactions(
                 )
             )
         except Exception:
-            # Singular matrix or convergence failure — skip this pair
+            # Singular matrix or convergence failure - skip this pair
             continue
 
     if not results:

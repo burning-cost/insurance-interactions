@@ -122,7 +122,7 @@ print(f"Coefficients: {len(glm.coef_)}")
 # MAGIC
 # MAGIC The CANN starts from the GLM prediction (zero-initialised output layer) and
 # MAGIC learns only the residual structure. Any deviation from the GLM prediction after
-# MAGIC training corresponds to structure the GLM cannot express — in this case, the
+# MAGIC training corresponds to structure the GLM cannot express - in this case, the
 # MAGIC age_band × vehicle_group interaction.
 
 # COMMAND ----------
@@ -321,6 +321,6 @@ print(result.stdout)
 if result.returncode != 0:
     print("STDERR:")
     print(result.stderr)
-    raise RuntimeError("Tests failed — see output above")
+    raise RuntimeError("Tests failed - see output above")
 else:
     print("\nAll tests passed.")

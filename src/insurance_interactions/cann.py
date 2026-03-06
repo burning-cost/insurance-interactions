@@ -10,7 +10,7 @@ from the GLM prediction exactly. This is the right architecture for interaction
 detection: the deviation of the trained network from zero corresponds to structure
 the GLM is missing, which NID then decodes.
 
-Supports Poisson (frequency) and Gamma (severity) families — the two standard
+Supports Poisson (frequency) and Gamma (severity) families - the two standard
 choices for UK personal lines GLMs.
 """
 
@@ -161,7 +161,7 @@ class CANNModel(nn.Module):
             Encoded input features, shape (batch, input_dim).
         glm_log_pred:
             Log of GLM prediction, shape (batch,) or (batch, 1). Treated as fixed
-            offset — not trained.
+            offset - not trained.
 
         Returns
         -------
@@ -200,7 +200,7 @@ class CANNModel(nn.Module):
         for module in self.mlp:
             if isinstance(module, nn.Linear):
                 matrices.append(module.weight.detach().cpu().numpy())
-        # First element is W^(1) — skip it; return from W^(2) onward
+        # First element is W^(1) - skip it; return from W^(2) onward
         return matrices[1:]
 
 

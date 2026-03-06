@@ -1,6 +1,6 @@
 """SHAP interaction values via shapiq for validation/confirmation.
 
-This module is optional — it requires ``shapiq`` and a tree model (CatBoost or
+This module is optional - it requires ``shapiq`` and a tree model (CatBoost or
 compatible). The SHAP interaction layer serves as a second opinion on the NID
 ranking. When both methods flag the same pair, you can be more confident the
 interaction is real rather than a CANN training artefact.

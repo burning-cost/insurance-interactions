@@ -12,7 +12,7 @@ same first-layer hidden unit. The NID score for a pair (i, j) is:
 
     d(i, j) = Σ_s  z_s * min(|W1[s,i]|, |W1[s,j]|)
 
-where z_s is the "output importance" of hidden unit s — the cumulative product of
+where z_s is the "output importance" of hidden unit s - the cumulative product of
 absolute weight matrices from layer 2 to the output, which gives how much unit s
 influences the final prediction. The min aggregation is critical: it forces both
 features to have non-negligible weight into unit s, ensuring genuine co-participation
@@ -53,7 +53,7 @@ def _compute_z_scores(w1: np.ndarray, w_rest: list[np.ndarray]) -> np.ndarray:
     ----------
     w1:
         Weight matrix of first hidden layer, shape (n_hidden_0, n_inputs).
-        Not used here — this is W^(1). We need what comes after.
+        Not used here - this is W^(1). We need what comes after.
     w_rest:
         Weight matrices from layer 2 to output, each shape (out, in).
         For a 2-layer MLP: [W^(2), W^(out)].
