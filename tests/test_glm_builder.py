@@ -16,7 +16,7 @@ import pytest
 from insurance_interactions.glm_builder import (
     _compute_n_cells,
     build_glm_with_interactions,
-    test_interactions,
+    test_interactions as run_interaction_tests,
 )
 
 
@@ -77,7 +77,7 @@ class TestComputeNCells:
 class TestTestInteractions:
     def test_runs_without_error(self):
         X, y, exposure = make_simple_df()
-        result = test_interactions(
+        result = run_interaction_tests(
             X=X,
             y=y,
             exposure=exposure,
@@ -88,7 +88,7 @@ class TestTestInteractions:
 
     def test_expected_columns(self):
         X, y, exposure = make_simple_df()
-        result = test_interactions(
+        result = run_interaction_tests(
             X=X,
             y=y,
             exposure=exposure,
@@ -101,7 +101,7 @@ class TestTestInteractions:
     def test_true_interaction_has_positive_delta_deviance(self):
         """Adding the true interaction should reduce deviance (positive delta)."""
         X, y, exposure = make_simple_df()
-        result = test_interactions(
+        result = run_interaction_tests(
             X=X,
             y=y,
             exposure=exposure,
@@ -117,7 +117,7 @@ class TestTestInteractions:
     def test_n_cells_cat_x_cat(self):
         """n_cells for cat × cat should match (L1-1)(L2-1)."""
         X, y, exposure = make_simple_df()
-        result = test_interactions(
+        result = run_interaction_tests(
             X=X,
             y=y,
             exposure=exposure,

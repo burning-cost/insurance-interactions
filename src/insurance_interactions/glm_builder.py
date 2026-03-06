@@ -12,7 +12,7 @@ Design choices:
     jointly refitting with the full set. This avoids overestimating the combined
     deviance improvement.
   - The likelihood-ratio test uses chi-squared with df = n_cells = (L_i-1)(L_j-1)
-    for categorical × categorical, or (L_i-1) for categorical × continuous.
+    for categorical x categorical, or (L_i-1) for categorical x continuous.
   - Bonferroni correction is applied by default to account for the multiple
     testing problem inherent in testing many candidate interactions.
 """
@@ -34,7 +34,7 @@ class InteractionTestResult:
     feature_1: str
     feature_2: str
     n_cells: int
-    """Parameter cost: (L_1 - 1) * (L_2 - 1) for cat×cat, or (L-1) for cat×cont."""
+    """Parameter cost: (L_1 - 1) * (L_2 - 1) for cat x cat, or (L-1) for cat x cont."""
     delta_deviance: float
     """Reduction in total deviance (positive = improvement)."""
     delta_deviance_pct: float
@@ -55,11 +55,11 @@ class InteractionTestResult:
 
 
 def _compute_n_cells(df: pl.DataFrame, feature_1: str, feature_2: str) -> int:
-    """Compute parameter cost of adding feature_1 × feature_2 interaction.
+    """Compute parameter cost of adding feature_1 x feature_2 interaction.
 
-    For categorical × categorical: (L_1 - 1) * (L_2 - 1)
-    For categorical × continuous: (L - 1)
-    For continuous × continuous: 1
+    For categorical x categorical: (L_1 - 1) * (L_2 - 1)
+    For categorical x continuous: (L - 1)
+    For continuous x continuous: 1
     """
     is_cat_1 = df[feature_1].dtype in (pl.Categorical, pl.String, pl.Enum)
     is_cat_2 = df[feature_2].dtype in (pl.Categorical, pl.String, pl.Enum)
@@ -79,17 +79,65 @@ def _compute_n_cells(df: pl.DataFrame, feature_1: str, feature_2: str) -> int:
 
 
 def _glum_deviance(model: Any, X: Any, y: np.ndarray, sample_weight: np.ndarray) -> float:
-    """Compute total deviance from a fitted glum model."""
+    """Compute total deviance from a fitted glum model.
+
+    Computes deviance from model predictions directly, which is compatible
+    with all versions of glum and avoids the .deviance() API surface.
+
+    Supports Poisson and Gamma families by detecting the family name from
+    the model object. Falls back to Poisson if detection fails.
+    """
+    mu = np.clip(model.predict(X), 1e-8, None)
+    y_arr = np.asarray(y, dtype=np.float64)
+    w_arr = np.asarray(sample_weight, dtype=np.float64)
+
+    # Detect family from model attributes — glum stores family as an object
+    family_obj = getattr(model, "family", None)
+    family_cls = getattr(family_obj, "__class__", None)
+    family_name = getattr(family_cls, "__name__", "").lower() if family_cls else ""
+
+    if "gamma" in family_name:
+        # Gamma deviance: 2 * sum(w * (-log(y/mu) + (y - mu)/mu))
+        y_safe = np.clip(y_arr, 1e-8, None)
+        d = 2.0 * np.sum(w_arr * (-np.log(y_safe / mu) + (y_safe - mu) / mu))
+    else:
+        # Poisson deviance (default; also correct for quasi-Poisson)
+        # When y=0: contribution is 2 * mu (the log term is zero).
+        # Mask the log computation explicitly to avoid divide-by-zero warnings
+        # even though np.where would produce the right result either way.
+        pos_mask = y_arr > 0
+        log_term = np.zeros_like(y_arr)
+        log_term[pos_mask] = y_arr[pos_mask] * np.log(y_arr[pos_mask] / mu[pos_mask])
+        d = 2.0 * np.sum(w_arr * (log_term - (y_arr - mu)))
+
+    return float(d)
+
+
+def _fit_glm_with_fallback(
+    glm_cls: Any,
+    family: str,
+    X_pd: Any,
+    y: np.ndarray,
+    exposure: np.ndarray,
+    alpha: float,
+) -> Any:
+    """Fit a glum GLM with automatic ridge fallback on singular matrix.
+
+    Tries the requested alpha first; if glum raises (singular matrix or
+    convergence failure), retries with a small ridge penalty of 1e-4 to
+    regularise the design matrix. This is common on small test datasets with
+    many categorical cells and limited observations.
+    """
+    def _try(a: float) -> Any:
+        m = glm_cls(family=family, alpha=a, fit_intercept=True)
+        m.fit(X_pd, y, sample_weight=exposure)
+        return m
+
     try:
-        # glum GeneralizedLinearRegressor has a score method returning deviance
-        return float(-2 * model.score(X, y, sample_weight=sample_weight))
+        return _try(alpha)
     except Exception:
-        # Fallback: compute from predictions
-        mu = np.clip(model.predict(X), 1e-8, None)
-        y_safe = np.clip(y, 1e-8, None)
-        # Poisson deviance
-        d = 2 * np.sum(sample_weight * (y_safe * np.log(y_safe / mu) - (y_safe - mu)))
-        return float(d)
+        # Singular or convergence failure — add small ridge and retry
+        return _try(max(alpha, 1e-4))
 
 
 def test_interactions(
@@ -136,18 +184,18 @@ def test_interactions(
 
     if exposure is None:
         exposure = np.ones(len(X), dtype=np.float64)
+    # glum's tabmat backend requires float64
+    y = np.asarray(y, dtype=np.float64)
+    exposure = np.asarray(exposure, dtype=np.float64)
 
     if interaction_pairs is None:
         cols = X.columns
         interaction_pairs = [(cols[i], cols[j]) for i in range(len(cols)) for j in range(i+1, len(cols))]
 
-    # Determine glum family and link
-    if family == "poisson":
-        glum_family = "poisson"
-    elif family == "gamma":
-        glum_family = "gamma"
-    else:
+    # Determine glum family
+    if family not in ("poisson", "gamma"):
         raise ValueError(f"family must be 'poisson' or 'gamma', got '{family}'")
+    glum_family = family
 
     # Fit base GLM (main effects only)
     X_pd = X.to_pandas()
@@ -155,13 +203,10 @@ def test_interactions(
     for col in cat_cols:
         X_pd[col] = pd.Categorical(X_pd[col].astype(str))
 
-    base_model = GeneralizedLinearRegressor(
-        family=glum_family,
-        alpha=l2_regularisation,
-        fit_intercept=True,
+    base_model = _fit_glm_with_fallback(
+        GeneralizedLinearRegressor, glum_family, X_pd, y, exposure, l2_regularisation
     )
-    base_model.fit(X_pd, y, sample_weight=exposure)
-    base_deviance = base_model.deviance(X_pd, y, sample_weight=exposure)
+    base_deviance = _glum_deviance(base_model, X_pd, y, exposure)
 
     n = len(X)
     n_params_base = len(base_model.coef_) + 1  # +1 for intercept
@@ -178,12 +223,12 @@ def test_interactions(
         # Build interaction feature(s)
         X_int = X_pd.copy()
         if feat1 in cat_cols and feat2 in cat_cols:
-            # Categorical × categorical: new combined categorical
+            # Categorical x categorical: new combined categorical
             X_int[f"_ix_{feat1}_{feat2}"] = pd.Categorical(
                 X_pd[feat1].astype(str) + "_X_" + X_pd[feat2].astype(str)
             )
         elif feat1 in cat_cols:
-            # Categorical × continuous: multiply the continuous by each indicator
+            # Categorical x continuous: multiply the continuous by each indicator
             for cat_val in X_pd[feat1].cat.categories[1:]:
                 col_name = f"_ix_{feat1}_{cat_val}_{feat2}"
                 X_int[col_name] = (X_pd[feat1] == cat_val).astype(float) * X_pd[feat2]
@@ -192,17 +237,14 @@ def test_interactions(
                 col_name = f"_ix_{feat1}_{feat2}_{cat_val}"
                 X_int[col_name] = (X_pd[feat2] == cat_val).astype(float) * X_pd[feat1]
         else:
-            # Continuous × continuous: product term
+            # Continuous x continuous: product term
             X_int[f"_ix_{feat1}_{feat2}"] = X_pd[feat1] * X_pd[feat2]
 
         try:
-            int_model = GeneralizedLinearRegressor(
-                family=glum_family,
-                alpha=l2_regularisation,
-                fit_intercept=True,
+            int_model = _fit_glm_with_fallback(
+                GeneralizedLinearRegressor, glum_family, X_int, y, exposure, l2_regularisation
             )
-            int_model.fit(X_int, y, sample_weight=exposure)
-            int_deviance = int_model.deviance(X_int, y, sample_weight=exposure)
+            int_deviance = _glum_deviance(int_model, X_int, y, exposure)
 
             delta_deviance = base_deviance - int_deviance
             lr_chi2 = delta_deviance
@@ -232,7 +274,7 @@ def test_interactions(
                 )
             )
         except Exception:
-            # Singular matrix or convergence failure - skip this pair
+            # Both attempts failed — skip this pair
             continue
 
     if not results:
@@ -294,6 +336,9 @@ def build_glm_with_interactions(
 
     if exposure is None:
         exposure = np.ones(len(X), dtype=np.float64)
+    # glum's tabmat backend requires float64
+    y = np.asarray(y, dtype=np.float64)
+    exposure = np.asarray(exposure, dtype=np.float64)
 
     cat_cols = [c for c in X.columns if X[c].dtype in (pl.Categorical, pl.String, pl.Enum)]
     X_pd = X.to_pandas()
@@ -301,13 +346,10 @@ def build_glm_with_interactions(
         X_pd[col] = pd.Categorical(X_pd[col].astype(str))
 
     # Base model
-    base_model = GeneralizedLinearRegressor(
-        family=family,
-        alpha=l2_regularisation,
-        fit_intercept=True,
+    base_model = _fit_glm_with_fallback(
+        GeneralizedLinearRegressor, family, X_pd, y, exposure, l2_regularisation
     )
-    base_model.fit(X_pd, y, sample_weight=exposure)
-    base_deviance = base_model.deviance(X_pd, y, sample_weight=exposure)
+    base_deviance = _glum_deviance(base_model, X_pd, y, exposure)
     n_params_base = len(base_model.coef_) + 1
 
     # Add interaction columns
@@ -334,13 +376,10 @@ def build_glm_with_interactions(
             else:
                 X_int[f"_ix_{feat1}_{feat2}"] = X_pd[feat1] * X_pd[feat2]
 
-    int_model = GeneralizedLinearRegressor(
-        family=family,
-        alpha=l2_regularisation,
-        fit_intercept=True,
+    int_model = _fit_glm_with_fallback(
+        GeneralizedLinearRegressor, family, X_int, y, exposure, l2_regularisation
     )
-    int_model.fit(X_int, y, sample_weight=exposure)
-    int_deviance = int_model.deviance(X_int, y, sample_weight=exposure)
+    int_deviance = _glum_deviance(int_model, X_int, y, exposure)
 
     n = len(X)
     n_params_int = len(int_model.coef_) + 1

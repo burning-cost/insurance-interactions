@@ -40,8 +40,10 @@ def _poisson_deviance(y_pred: torch.Tensor, y_true: torch.Tensor, weights: torch
     mu = torch.clamp(y_pred, min=1e-8)
     y = torch.clamp(y_true, min=0.0)
     # Poisson deviance term: 2 * (y*log(y/mu) - (y - mu))
-    # When y=0: 2*(0 - (0-mu)) = 2*mu
-    safe_log = torch.where(y > 0, y * torch.log(y / mu), torch.zeros_like(y))
+    # Use torch.xlogy for the y*log(y/mu) term: correctly returns 0 when y=0,
+    # and — critically — propagates zero gradient through the y=0 case rather
+    # than producing NaN from 0 * log(0) which torch.where does not prevent.
+    safe_log = torch.xlogy(y, y / mu)
     deviance = 2.0 * weights * (safe_log - (y - mu))
     return deviance.mean()
 
@@ -179,6 +181,8 @@ class CANNModel(nn.Module):
             correction = correction + univariate_sum
 
         log_mu = correction + glm_log_pred.squeeze(-1)
+        # Clamp to prevent overflow (>88) or extreme underflow (<-88) in float32
+        log_mu = torch.clamp(log_mu, min=-20.0, max=20.0)
         return torch.exp(log_mu)
 
     def get_first_layer_weights(self) -> np.ndarray:
@@ -392,8 +396,10 @@ class CANN:
         train_ds = TensorDataset(X_t, y_t, glm_t, w_t)
         loader = DataLoader(train_ds, batch_size=self.config.batch_size, shuffle=True)
 
+        # Save initial state (zero-init output = guaranteed GLM prediction).
+        # This ensures best_state is always valid even if training never improves.
         best_val_loss = float("inf")
-        best_state = None
+        best_state = {k: v.clone() for k, v in model.state_dict().items()}
         patience_count = 0
         val_history: list[float] = []
 
@@ -403,14 +409,33 @@ class CANN:
                 optimiser.zero_grad()
                 pred = model(xb, gb)
                 loss = self._loss_fn(pred, yb, wb)
+                if not torch.isfinite(loss):
+                    # Loss is NaN/Inf — skip this batch, do not step
+                    continue
                 loss.backward()
+                # Clip gradients to prevent explosion on small/noisy batches
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimiser.step()
+                # If weights went NaN (can happen with extreme inputs), roll back
+                params_ok = all(
+                    torch.isfinite(p).all()
+                    for p in model.parameters()
+                )
+                if not params_ok:
+                    model.load_state_dict(best_state)
+                    # Reset optimiser state to avoid stale moments
+                    optimiser = torch.optim.Adam(
+                        model.parameters(),
+                        lr=self.config.learning_rate,
+                        weight_decay=self.config.weight_decay,
+                    )
 
             # Validation
             model.eval()
             with torch.no_grad():
                 val_pred = model(X_v, glm_v)
-                val_loss = self._loss_fn(val_pred, y_v, w_v).item()
+                val_loss_t = self._loss_fn(val_pred, y_v, w_v)
+                val_loss = val_loss_t.item() if torch.isfinite(val_loss_t) else float("inf")
             val_history.append(val_loss)
 
             if val_loss < best_val_loss - 1e-6:
@@ -422,8 +447,7 @@ class CANN:
                 if patience_count >= self.config.patience:
                     break
 
-        if best_state is not None:
-            model.load_state_dict(best_state)
+        model.load_state_dict(best_state)
         return model, val_history
 
     def fit(

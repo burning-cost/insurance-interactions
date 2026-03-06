@@ -84,12 +84,15 @@ def _nid_scores_single(
     feature_slices: dict[str, slice],
     max_order: int = 2,
 ) -> dict[tuple[str, ...], float]:
-    """NID scores for all feature pairs from a single CANN run.
+    """NID scores for all feature interaction sets from a single CANN run.
 
     For categorical features with multiple one-hot columns, the feature-level
     weight is the L2 norm across the one-hot columns for that feature. This
     collapses the variable back to a single importance per feature per hidden unit,
     which is the correct approach since the feature is conceptually one variable.
+
+    Computes interactions of all orders from 2 up to max_order. So max_order=3
+    returns both pairwise and three-way interaction scores.
     """
     feature_names = list(feature_slices.keys())
     n_hidden = w1.shape[0]
@@ -105,14 +108,16 @@ def _nid_scores_single(
         cols = np.abs(w1[:, s])  # shape (n_hidden, n_one_hot_cols)
         w1_agg[:, k] = np.linalg.norm(cols, axis=1)
 
-    # Compute NID score for every candidate interaction set
+    # Compute NID score for every candidate interaction set.
+    # Includes all orders from 2 to max_order (pairwise + three-way if max_order=3).
     scores: dict[tuple[str, ...], float] = {}
-    for indices in combinations(range(n_features), max_order):
-        feat_tuple = tuple(feature_names[i] for i in indices)
-        # Per-unit score: z_s * min(|W1[s,i]|, |W1[s,j]|, ...)
-        min_weights = np.min(w1_agg[:, list(indices)], axis=1)  # shape (n_hidden,)
-        score = float(np.sum(z * min_weights))
-        scores[feat_tuple] = score
+    for order in range(2, max_order + 1):
+        for indices in combinations(range(n_features), order):
+            feat_tuple = tuple(feature_names[i] for i in indices)
+            # Per-unit score: z_s * min(|W1[s,i]|, |W1[s,j]|, ...)
+            min_weights = np.min(w1_agg[:, list(indices)], axis=1)  # shape (n_hidden,)
+            score = float(np.sum(z * min_weights))
+            scores[feat_tuple] = score
 
     return scores
 
@@ -133,7 +138,8 @@ def compute_nid_scores(
         Maps original feature name to column slice in the encoded input, from
         ``CANN.feature_slices``.
     max_order:
-        Maximum interaction order. 2 = pairwise (default). 3 = three-way.
+        Maximum interaction order. 2 = pairwise only (default). 3 = pairwise
+        plus three-way interactions.
     normalise:
         If True, normalise scores to [0, 1] by dividing by the maximum. This makes
         cross-run and cross-dataset comparison easier.

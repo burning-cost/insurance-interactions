@@ -1,101 +1,71 @@
 """Run insurance-interactions tests on Databricks.
 
-Usage on Databricks cluster (or as a notebook cell):
-    %pip install -e /path/to/insurance-interactions[dev]
-    %run /Workspace/insurance-interactions/tests/run_tests_databricks.py
-
-Or from local machine using the Databricks Jobs API via the SDK:
-    python tests/run_tests_databricks.py
+This script is submitted as a spark_python_task (not a notebook).
+It installs dependencies, then runs pytest.
 """
 
 from __future__ import annotations
 
-import os
+import subprocess
 import sys
-import tempfile
-import time
+import os
 
 
-def run_via_sdk() -> None:
-    """Upload the project to Databricks workspace and run pytest via a job."""
-    try:
-        from dotenv import load_dotenv
-        load_dotenv(os.path.expanduser("~/.config/burning-cost/databricks.env"))
-    except ImportError:
-        # Parse env file manually
-        env_path = os.path.expanduser("~/.config/burning-cost/databricks.env")
-        if os.path.exists(env_path):
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, _, val = line.partition("=")
-                        os.environ.setdefault(key.strip(), val.strip())
+def main() -> None:
+    src_path = "/Workspace/Users/pricing.frontier@gmail.com/insurance-interactions/src"
+    tests_path = "/Workspace/Users/pricing.frontier@gmail.com/insurance-interactions/tests"
 
-    from databricks.sdk import WorkspaceClient
-    from databricks.sdk.service import jobs
+    print("=== insurance-interactions test runner ===")
+    print(f"Python: {sys.executable}")
+    print(f"src_path exists: {os.path.isdir(src_path)}")
+    print(f"tests_path exists: {os.path.isdir(tests_path)}")
 
-    w = WorkspaceClient()
-    workspace_path = "/Workspace/Users/pricing.frontier@gmail.com/insurance-interactions"
-
-    print(f"Uploading project to {workspace_path} ...")
-    import subprocess
-    result = subprocess.run(
-        [
-            "databricks", "workspace", "import-dir",
-            "--overwrite",
-            str(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            workspace_path,
-        ],
+    # Install dependencies
+    print("\n=== Installing dependencies ===")
+    install = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--quiet",
+         "torch", "numpy", "polars", "scipy", "glum", "pytest",
+         "-e", "/Workspace/Users/pricing.frontier@gmail.com/insurance-interactions",
+         ],
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
-        print("Upload stderr:", result.stderr)
+    if install.returncode != 0:
+        print("pip install FAILED:")
+        print(install.stdout)
+        print(install.stderr)
         sys.exit(1)
-    print("Upload complete.")
+    print("Dependencies installed.")
 
-    # Create and run a one-time job
-    notebook_path = f"{workspace_path}/notebooks/run_tests_notebook"
-    run = w.jobs.submit(
-        run_name="insurance-interactions-tests",
-        tasks=[
-            jobs.SubmitTask(
-                task_key="run-pytest",
-                notebook_task=jobs.NotebookTask(
-                    notebook_path=notebook_path,
-                ),
-                new_cluster=jobs.BaseClusterInfo(
-                    spark_version="14.3.x-cpu-ml-scala2.12",
-                    node_type_id="Standard_DS3_v2",
-                    num_workers=0,
-                    spark_conf={
-                        "spark.databricks.cluster.profile": "singleNode",
-                        "spark.master": "local[*]",
-                    },
-                    custom_tags={"ResourceClass": "SingleNode"},
-                ),
-            )
-        ],
+    # Run tests
+    print("\n=== Running pytest ===")
+    env = dict(os.environ)
+    env["PYTHONPATH"] = src_path
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest",
+         tests_path,
+         "-v", "--tb=short",
+         "--ignore=" + tests_path + "/run_tests_databricks.py",
+         "--ignore=" + tests_path + "/submit_databricks_tests.py",
+         ],
+        capture_output=True,
+        text=True,
+        cwd="/Workspace/Users/pricing.frontier@gmail.com/insurance-interactions",
+        env=env,
     )
-    run_id = run.run_id
-    print(f"Job submitted, run_id={run_id}. Waiting for completion...")
+    print(result.stdout)
+    if result.stderr.strip():
+        print("STDERR:", result.stderr[-3000:])
+    print(f"\nReturn code: {result.returncode}")
 
-    while True:
-        status = w.jobs.get_run(run_id=run_id)
-        life_cycle = status.state.life_cycle_state.value if status.state.life_cycle_state else "UNKNOWN"
-        result_state = status.state.result_state.value if status.state.result_state else ""
-        print(f"  State: {life_cycle} {result_state}")
-        if life_cycle in ("TERMINATED", "SKIPPED", "INTERNAL_ERROR"):
-            if result_state == "SUCCESS":
-                print("Tests passed.")
-            else:
-                print(f"Tests FAILED. Result: {result_state}")
-                print("Check Databricks UI for logs.")
-                sys.exit(1)
-            break
-        time.sleep(15)
+    if result.returncode == 0:
+        print("\n=== All tests PASSED ===")
+        sys.exit(0)
+    else:
+        print(f"\n=== Tests FAILED (exit code {result.returncode}) ===")
+        sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
-    run_via_sdk()
+    main()
