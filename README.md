@@ -89,13 +89,13 @@ The `n_cells` column is important for credibility decisions: a strong interactio
 ## Installation
 
 ```bash
-pip install insurance-interactions
+uv pip install insurance-interactions
 ```
 
 With SHAP interaction validation (requires CatBoost):
 
 ```bash
-pip install insurance-interactions[shap]
+uv pip install "insurance-interactions[shap]"
 ```
 
 ## Configuration

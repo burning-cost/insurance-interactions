@@ -132,7 +132,7 @@ def test_interactions(
         from glum import GeneralizedLinearRegressor
         import pandas as pd
     except ImportError as e:
-        raise ImportError("glum is required for GLM interaction testing. pip install glum") from e
+        raise ImportError("glum is required for GLM interaction testing. uv pip install glum") from e
 
     if exposure is None:
         exposure = np.ones(len(X), dtype=np.float64)
@@ -290,7 +290,7 @@ def build_glm_with_interactions(
         from glum import GeneralizedLinearRegressor
         import pandas as pd
     except ImportError as e:
-        raise ImportError("glum is required. pip install glum") from e
+        raise ImportError("glum is required. uv pip install glum") from e
 
     if exposure is None:
         exposure = np.ones(len(X), dtype=np.float64)
