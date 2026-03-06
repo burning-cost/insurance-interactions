@@ -186,7 +186,7 @@ def compute_shap_interactions(
     except Exception as e:
         raise RuntimeError(
             f"shapiq TreeExplainer failed: {e}. "
-            "Ensure the model is a supported tree ensemble (CatBoost, XGBoost, LightGBM)."
+            "Ensure the model is a supported CatBoost tree ensemble."
         ) from e
 
     # interaction_values is an InteractionValues object
