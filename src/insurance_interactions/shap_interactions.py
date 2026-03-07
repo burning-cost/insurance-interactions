@@ -41,7 +41,7 @@ def _require_shapiq() -> Any:
     except ImportError as e:
         raise ImportError(
             "shapiq is required for SHAP interaction values. "
-            "Install it with: uv pip install "insurance-interactions[shap]""
+            "Install it with: uv add "insurance-interactions[shap]""
         ) from e
 
 
@@ -52,7 +52,7 @@ def _require_catboost() -> Any:
     except ImportError as e:
         raise ImportError(
             "catboost is required for GBM-based validation. "
-            "Install it with: uv pip install "insurance-interactions[shap]""
+            "Install it with: uv add "insurance-interactions[shap]""
         ) from e
 
 
