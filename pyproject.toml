@@ -61,8 +61,8 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/burningcost/insurance-interactions"
-Issues = "https://github.com/burningcost/insurance-interactions/issues"
+Repository = "https://github.com/burning-cost/insurance-interactions"
+Issues = "https://github.com/burning-cost/insurance-interactions/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/insurance_interactions"]
