@@ -1,4 +1,5 @@
 # insurance-interactions
+[![Tests](https://github.com/burning-cost/insurance-interactions/actions/workflows/ci.yml/badge.svg)](https://github.com/burning-cost/insurance-interactions/actions/workflows/ci.yml)
 
 Automated detection of missing interaction terms in UK personal lines GLMs.
 
