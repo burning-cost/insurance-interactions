@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insurance-interactions"
-version = "0.1.0"
+version = "0.1.1"
 description = "Automated GLM interaction detection for UK personal lines insurance using CANN + NID"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -43,11 +43,13 @@ dependencies = [
     "numpy>=1.25",
     "polars>=0.20",
     "scipy>=1.11",
-    "torch>=2.0",
     "glum>=2.7",
 ]
 
 [project.optional-dependencies]
+torch = [
+    "torch>=2.0",
+]
 shap = [
     "shapiq>=0.1",
     "catboost>=1.2",
@@ -59,6 +61,7 @@ dev = [
     "pytest>=7.0",
     "pyarrow>=12.0",
     "pytest-cov>=4.0",
+    "torch>=2.0",
 ]
 
 [project.urls]
