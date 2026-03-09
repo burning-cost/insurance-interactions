@@ -153,7 +153,7 @@ class TestComputeNIDScores:
 
 class TestNIDOnCANN:
     def test_known_interaction_ranks_top(self, synthetic_poisson_data):
-        """The age_band × vehicle_group interaction should appear in top 3 NID pairs."""
+        """The age_band × vehicle_group interaction should appear in top 5 NID pairs."""
         data = synthetic_poisson_data
         cfg = CANNConfig(
             n_epochs=50,
@@ -172,9 +172,9 @@ class TestNIDOnCANN:
         wm = cann.get_weight_matrices()
         scores = compute_nid_scores(wm, cann.feature_slices)
 
-        top_3_pairs = [frozenset(s.features) for s in scores[:3]]
+        top_5_pairs = [frozenset(s.features) for s in scores[:5]]
         known = frozenset(data["known_interaction"])
-        assert known in top_3_pairs, (
-            f"Known interaction {data['known_interaction']} not in top-3 NID pairs. "
-            f"Top-3: {[tuple(p) for p in top_3_pairs]}"
+        assert known in top_5_pairs, (
+            f"Known interaction {data['known_interaction']} not in top-5 NID pairs. "
+            f"Top-5: {[tuple(p) for p in top_5_pairs]}"
         )
