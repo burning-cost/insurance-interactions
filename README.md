@@ -1,11 +1,14 @@
 # insurance-interactions
+
 [![Tests](https://github.com/burning-cost/insurance-interactions/actions/workflows/ci.yml/badge.svg)](https://github.com/burning-cost/insurance-interactions/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/insurance-interactions)](https://pypi.org/project/insurance-interactions/)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
 Automated detection of missing interaction terms in UK personal lines GLMs.
 
 ## The problem
 
-A Poisson frequency GLM for motor insurance with 12 rating factors has 66 possible pairwise interactions. Manually searching them - fitting, testing, reviewing 2D actual-vs-expected plots - takes days and is driven by intuition rather than data. You will miss interactions that are not obvious from marginal plots, and you will spend time testing pairs that are irrelevant.
+A Poisson frequency GLM for motor insurance with 12 rating factors has 66 possible pairwise interactions. Manually searching them — fitting, testing, reviewing 2D actual-vs-expected plots — takes days and is driven by intuition rather than data. You will miss interactions that are not obvious from marginal plots, and you will spend time testing pairs that are irrelevant.
 
 The standard manual process:
 1. Fit a GBM to get a benchmark prediction
@@ -20,7 +23,7 @@ This library automates steps 2–4.
 
 The pipeline has three stages:
 
-**Stage 1 - CANN**: Train a Combined Actuarial Neural Network (Schelldorfer & Wüthrich 2019) on the residuals of your existing GLM. The CANN uses a skip connection so it starts from the GLM prediction and only learns what the GLM is missing. After training, any deviation of the CANN from zero encodes structure the GLM cannot express - interactions.
+**Stage 1 - CANN**: Train a Combined Actuarial Neural Network (Schelldorfer & Wüthrich 2019) on the residuals of your existing GLM. The CANN uses a skip connection so it starts from the GLM prediction and only learns what the GLM is missing. After training, any deviation of the CANN from zero encodes structure the GLM cannot express — interactions.
 
 **Stage 2 - NID**: Apply Neural Interaction Detection (Tsang et al. 2018) to the trained CANN weights. The algorithm reads the interaction structure directly from the weight matrices: two features can only interact if they both contribute to the same first-layer hidden unit. The NID score for a pair (i, j) is:
 
@@ -30,7 +33,7 @@ d(i,j) = Σ_s  z_s · min(|W1[s,i]|, |W1[s,j]|)
 
 where `z_s` is how much first-layer unit `s` influences the output (the product of absolute weight matrices from layer 2 to the output). This gives a ranked list of candidate interactions in milliseconds after training.
 
-**Stage 3 - GLM testing**: For each top-K candidate pair, refit the GLM with the interaction added and compute a likelihood-ratio test statistic. The output table includes deviance improvement, AIC/BIC, p-values (Bonferroni corrected), and `n_cells` - the parameter cost of adding each interaction.
+**Stage 3 - GLM testing**: For each top-K candidate pair, refit the GLM with the interaction added and compute a likelihood-ratio test statistic. The output table includes deviance improvement, AIC/BIC, p-values (Bonferroni corrected), and `n_cells` — the parameter cost of adding each interaction.
 
 Both Poisson (frequency) and Gamma (severity) families are supported.
 
@@ -152,16 +155,31 @@ The CANN architecture:
 μ_CANN(x) = μ_GLM(x) * exp(NN(x; θ))
 ```
 
-The GLM prediction enters as a fixed log-space offset. The output layer of the neural network is zero-initialised so the CANN equals the GLM exactly at the start of training. The network then learns only the residual structure - which, in a well-specified GLM missing interactions, corresponds to those interaction terms.
+The GLM prediction enters as a fixed log-space offset. The output layer of the neural network is zero-initialised so the CANN equals the GLM exactly at the start of training. The network then learns only the residual structure — which, in a well-specified GLM missing interactions, corresponds to those interaction terms.
 
 ## Limitations
 
 - NID depends on the CANN having converged. Poor training (small dataset, high learning rate, too few epochs) produces unreliable weight matrices. Use `n_ensemble ≥ 3` and check `cann.val_deviance_history`.
 - Very small datasets (< 5,000 policies) may not provide enough signal for the CANN to learn stable residual structure. The LR tests still work but the NID ranking may be noisy.
-- NID is not a statistical test - it produces a ranking, not p-values. The LR test in Stage 3 provides the statistical rigour.
+- NID is not a statistical test — it produces a ranking, not p-values. The LR test in Stage 3 provides the statistical rigour.
 - Correlated features (age and NCD in UK motor) can spread interaction signal across spurious pairs. The MLP-M variant with L1 sparsity partially mitigates this.
 - The GLM refit step uses glum. If your rating engine uses a different GLM package, the `n_cells`, `delta_deviance`, and LR statistics are still valid; just refit your own model with the suggested interaction pairs.
 
 ## Regulatory context
 
 UK actuaries working under PRA SS1/23 model risk governance and FCA Consumer Duty pricing rules need interaction decisions to be auditable. This library is designed to support that: it produces a ranked table with test statistics, not a black-box model. The actuary decides which interactions to add; the library provides the shortlist and the evidence.
+
+## Read more
+
+[Finding the Interactions Your GLM Missed](https://burning-cost.github.io/2026/03/07/finding-the-interactions-your-glm-missed.html) — how CANN + NID automates the interaction search and why manual 2D A/E plots miss the non-obvious pairs.
+
+## Related libraries
+
+| Library | Why it's relevant |
+|---------|------------------|
+| [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract rating relativities from GBMs — use the GBM as the benchmark that reveals where the GLM is missing structure |
+| [bayesian-pricing](https://github.com/burning-cost/bayesian-pricing) | Hierarchical Bayesian models for thin rating cells — once interactions are identified, thin interaction cells need partial pooling |
+| [insurance-datasets](https://github.com/burning-cost/insurance-datasets) | Synthetic UK motor and home datasets — use to validate the detector recovers known interaction structure |
+| [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for pricing models — use to assess whether adding interactions improves out-of-sample performance |
+
+[All Burning Cost libraries →](https://burning-cost.github.io)
