@@ -44,8 +44,24 @@ import polars as pl
 import numpy as np
 from insurance_interactions import InteractionDetector, build_glm_with_interactions
 
-# You have: X (Polars DataFrame), y (claim counts), exposure,
-# and mu_glm (fitted values from your existing Poisson GLM)
+
+# Generate synthetic UK motor data to run this example end to end.
+# In production, supply your actual rating factor DataFrame, claim counts,
+# fitted GLM predictions, and exposure weights.
+rng = np.random.default_rng(42)
+N = 10_000
+age_band = pl.Series('age_band', rng.choice(['<25', '25-40', '40-60', '60+'], size=N))
+vehicle_group = pl.Series('vehicle_group', rng.choice(['A', 'B', 'C', 'D'], size=N))
+ncd = pl.Series('ncd', rng.integers(0, 10, size=N))
+annual_mileage = pl.Series('annual_mileage', rng.integers(3000, 30000, size=N))
+X_train = pl.DataFrame([age_band, vehicle_group, ncd, annual_mileage])
+
+# Exposure and claim counts with a known age_band x vehicle_group interaction
+exposure_train = rng.uniform(0.1, 1.0, size=N)
+base_rate = 0.06
+young_hv = ((age_band == '<25') & (vehicle_group == 'D')).to_numpy().astype(float)
+mu_glm_train = base_rate * exposure_train * (1 + 0.4 * young_hv)  # 'true' GLM without interaction
+y_train = rng.poisson(mu_glm_train)
 
 detector = InteractionDetector(family="poisson")
 detector.fit(
