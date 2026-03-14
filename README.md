@@ -217,3 +217,12 @@ Run `notebooks/benchmark.py` on Databricks to reproduce.
 | [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for pricing models — use to assess whether adding interactions improves out-of-sample performance |
 
 [All Burning Cost libraries →](https://burning-cost.github.io)
+
+## Related Libraries
+
+| Library | What it does |
+|---------|-------------|
+| [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract rating relativities from GBMs — use the GBM benchmark to identify where the GLM is missing structure |
+| [insurance-causal](https://github.com/burning-cost/insurance-causal) | Double Machine Learning for causal inference — establishes whether detected interactions are genuine causal drivers |
+| [insurance-synthetic](https://github.com/burning-cost/insurance-synthetic) | Synthetic portfolio generation — create datasets with known interaction structure to validate detection |
+
