@@ -182,18 +182,55 @@ def compute_nid_scores(
     return results
 
 
-def nid_to_dataframe(scores: list[InteractionScore]) -> pl.DataFrame:
+def nid_to_dataframe(
+    scores: list[InteractionScore],
+    order: int | None = None,
+) -> pl.DataFrame:
     """Convert NID scores to a Polars DataFrame for easy inspection.
 
-    For pairwise interactions the columns are ``feature_1``, ``feature_2``,
-    ``nid_score``, ``nid_score_normalised``. For higher-order interactions,
-    the features are stored as a list in the ``features`` column.
+    When the score list contains mixed-order interactions (e.g. both pairwise and
+    three-way scores from ``max_order=3``), use the ``order`` parameter to filter
+    to a single order before converting. If ``order`` is None and the list contains
+    scores of a single order, the column layout is chosen automatically:
+
+    - Order 2 (pairwise): columns are ``feature_1``, ``feature_2``,
+      ``nid_score``, ``nid_score_normalised``.
+    - Order > 2: columns are ``features`` (list), ``nid_score``,
+      ``nid_score_normalised``.
+
+    Parameters
+    ----------
+    scores:
+        Output of ``compute_nid_scores()``.
+    order:
+        If provided, only include scores where ``len(features) == order``.
+        Use ``order=2`` to get just pairwise interactions from a mixed list.
     """
     if not scores:
         return pl.DataFrame()
 
-    order = len(scores[0].features)
-    if order == 2:
+    # Filter to the requested order if specified
+    if order is not None:
+        scores = [s for s in scores if len(s.features) == order]
+        if not scores:
+            return pl.DataFrame()
+
+    # Detect whether the (filtered) list is uniform-order or mixed
+    orders_present = {len(s.features) for s in scores}
+    if len(orders_present) > 1:
+        # Mixed orders — cannot use the flat feature_1/feature_2 layout.
+        # Store all interactions in the generic list column.
+        return pl.DataFrame(
+            {
+                "features": [list(s.features) for s in scores],
+                "order": [len(s.features) for s in scores],
+                "nid_score": [s.nid_score for s in scores],
+                "nid_score_normalised": [s.nid_score_normalised for s in scores],
+            }
+        )
+
+    detected_order = next(iter(orders_present))
+    if detected_order == 2:
         return pl.DataFrame(
             {
                 "feature_1": [s.features[0] for s in scores],

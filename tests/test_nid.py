@@ -151,6 +151,72 @@ class TestComputeNIDScores:
         assert set(df.columns) >= expected_cols
 
 
+class TestNIDToDataframeMixedOrder:
+    """Tests for nid_to_dataframe with mixed pairwise + three-way score lists (P2-1 fix)."""
+
+    def _make_mixed_scores(self) -> list[InteractionScore]:
+        """Return a list with both order-2 and order-3 InteractionScores."""
+        return [
+            InteractionScore(features=("a", "b"), nid_score=1.0, nid_score_normalised=1.0),
+            InteractionScore(features=("a", "c"), nid_score=0.8, nid_score_normalised=0.8),
+            InteractionScore(features=("a", "b", "c"), nid_score=0.5, nid_score_normalised=0.5),
+        ]
+
+    def test_mixed_order_no_crash(self):
+        """nid_to_dataframe should not crash on a mixed-order list."""
+        scores = self._make_mixed_scores()
+        df = nid_to_dataframe(scores)
+        assert not df.is_empty()
+
+    def test_mixed_order_uses_features_column(self):
+        """Mixed-order list should produce a 'features' column, not feature_1/feature_2."""
+        scores = self._make_mixed_scores()
+        df = nid_to_dataframe(scores)
+        assert "features" in df.columns
+
+    def test_mixed_order_has_order_column(self):
+        """Mixed-order output should include an 'order' column for filtering."""
+        scores = self._make_mixed_scores()
+        df = nid_to_dataframe(scores)
+        assert "order" in df.columns
+        orders = set(df["order"].to_list())
+        assert orders == {2, 3}
+
+    def test_order_filter_pairwise(self):
+        """order=2 filter returns only pairwise rows with feature_1/feature_2 layout."""
+        scores = self._make_mixed_scores()
+        df = nid_to_dataframe(scores, order=2)
+        assert "feature_1" in df.columns
+        assert "feature_2" in df.columns
+        assert len(df) == 2
+
+    def test_order_filter_three_way(self):
+        """order=3 filter returns only three-way rows with features list layout."""
+        scores = self._make_mixed_scores()
+        df = nid_to_dataframe(scores, order=3)
+        assert "features" in df.columns
+        assert len(df) == 1
+
+    def test_uniform_pairwise_unchanged(self):
+        """A purely pairwise list still produces the classic feature_1/feature_2 layout."""
+        scores = [
+            InteractionScore(features=("a", "b"), nid_score=1.0, nid_score_normalised=1.0),
+            InteractionScore(features=("a", "c"), nid_score=0.5, nid_score_normalised=0.5),
+        ]
+        df = nid_to_dataframe(scores)
+        assert "feature_1" in df.columns
+        assert "feature_2" in df.columns
+        assert "order" not in df.columns
+
+    def test_empty_after_order_filter(self):
+        """Filtering to a non-existent order returns an empty DataFrame."""
+        scores = [
+            InteractionScore(features=("a", "b"), nid_score=1.0, nid_score_normalised=1.0),
+        ]
+        df = nid_to_dataframe(scores, order=3)
+        assert df.is_empty()
+
+
 class TestNIDOnCANN:
     @pytest.mark.xfail(
         reason=(

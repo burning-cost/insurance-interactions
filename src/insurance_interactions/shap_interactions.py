@@ -41,7 +41,7 @@ def _require_shapiq() -> Any:
     except ImportError as e:
         raise ImportError(
             "shapiq is required for SHAP interaction values. "
-            "Install it with: uv add "insurance-interactions[shap]""
+            "Install it with: uv add \"insurance-interactions[shap]\""
         ) from e
 
 
@@ -52,7 +52,7 @@ def _require_catboost() -> Any:
     except ImportError as e:
         raise ImportError(
             "catboost is required for GBM-based validation. "
-            "Install it with: uv add "insurance-interactions[shap]""
+            "Install it with: uv add \"insurance-interactions[shap]\""
         ) from e
 
 
@@ -194,13 +194,19 @@ def compute_shap_interactions(
     n_features = len(feature_names)
     phi_matrix = np.zeros((n_features, n_features))
 
-    # shapiq returns aggregated interaction values when .explain_all() is used
-    # Extract the interaction dict for each observation and aggregate
+    # shapiq returns aggregated interaction values when .explain_all() is used.
+    # Extract the interaction dict for each observation and aggregate.
+    #
+    # Guard against mixed-order keys (order-1 keys like (i,) can appear alongside
+    # order-2 keys when shapiq returns a combined InteractionValues object).
+    # Never unpack the key before checking its length — use the safe pattern
+    # `for indices, v in ...: if len(indices) == 2: i, j = indices`.
     if hasattr(interaction_values, "values"):
         # Single InteractionValues object returned from explain_all in some shapiq versions
         iv = interaction_values
-        for (i, j), v in iv.dict().items():
-            if len((i, j)) == 2:
+        for indices, v in iv.dict().items():
+            if len(indices) == 2:
+                i, j = indices
                 phi_matrix[i, j] += abs(v)
                 phi_matrix[j, i] += abs(v)
     elif hasattr(interaction_values, "__iter__"):

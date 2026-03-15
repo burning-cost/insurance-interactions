@@ -15,6 +15,22 @@ Design choices:
     for categorical x categorical, or (L_i-1) for categorical x continuous.
   - Bonferroni correction is applied by default to account for the multiple
     testing problem inherent in testing many candidate interactions.
+
+AIC/BIC note:
+  The ``deviance_aic`` and ``deviance_bic`` columns use the deviance-based
+  information criterion:
+
+      deviance_AIC = D + 2k
+      deviance_BIC = D + k * log(n)
+
+  where D = -2 * (LL_model - LL_saturated) is the total deviance and k is the
+  number of model parameters. This differs from the true AIC = -2*LL_model + 2k
+  by the constant -2*LL_saturated (which does not depend on the model). Delta
+  values (delta_deviance_aic, delta_deviance_bic) are therefore identical to
+  standard delta-AIC/delta-BIC and can be used directly for model comparison.
+  The absolute values will NOT match R's AIC() or statsmodels. This is intentional
+  — computing LL_saturated requires a family-specific formula and the absolute
+  value is meaningless for ranking interactions anyway.
 """
 
 from __future__ import annotations
@@ -45,13 +61,17 @@ class InteractionTestResult:
     """Degrees of freedom for LR test (equal to n_cells)."""
     lr_p: float
     """P-value from chi-squared distribution."""
-    aic_base: float
-    aic_interaction: float
-    delta_aic: float
+    deviance_aic_base: float
+    """Deviance-based AIC for base model (D + 2k). See module docstring."""
+    deviance_aic_interaction: float
+    """Deviance-based AIC for interaction model (D + 2k). See module docstring."""
+    delta_deviance_aic: float
     """Negative = interaction improves AIC (lower is better)."""
-    bic_base: float
-    bic_interaction: float
-    delta_bic: float
+    deviance_bic_base: float
+    """Deviance-based BIC for base model (D + k*log(n)). See module docstring."""
+    deviance_bic_interaction: float
+    """Deviance-based BIC for interaction model (D + k*log(n)). See module docstring."""
+    delta_deviance_bic: float
 
 
 def _compute_n_cells(df: pl.DataFrame, feature_1: str, feature_2: str) -> int:
@@ -140,6 +160,45 @@ def _fit_glm_with_fallback(
         return _try(max(alpha, 1e-4))
 
 
+def _add_cat_x_cat_interaction_columns(
+    X_int: Any,
+    X_pd: Any,
+    feat1: str,
+    feat2: str,
+) -> None:
+    """Add proper (L1-1)*(L2-1) interaction contrast columns for cat x cat.
+
+    This mirrors R's glm() with ``A:B`` syntax: for each non-reference level
+    of A and each non-reference level of B, we add a binary indicator
+    indicator(A=i) * indicator(B=j). The reference level for each feature is
+    the first category in sorted order.
+
+    The main effects for A and B remain in the base model columns. Only the
+    interaction contrasts are added here, preserving the nested model structure
+    required for a valid LR test.
+
+    Parameters
+    ----------
+    X_int:
+        Pandas DataFrame to mutate in place — interaction columns are appended.
+    X_pd:
+        Original pandas DataFrame with the main-effect categorical columns.
+    feat1, feat2:
+        Names of the two categorical columns.
+    """
+    cats1 = sorted(X_pd[feat1].cat.categories.tolist())
+    cats2 = sorted(X_pd[feat2].cat.categories.tolist())
+    # Skip reference level (first sorted category) for each feature
+    non_ref1 = cats1[1:]
+    non_ref2 = cats2[1:]
+    for v1 in non_ref1:
+        ind1 = (X_pd[feat1] == v1).astype(float)
+        for v2 in non_ref2:
+            ind2 = (X_pd[feat2] == v2).astype(float)
+            col_name = f"_ix_{feat1}_{v1}_X_{feat2}_{v2}"
+            X_int[col_name] = ind1 * ind2
+
+
 def test_interactions(
     X: pl.DataFrame,
     y: np.ndarray,
@@ -175,6 +234,13 @@ def test_interactions(
     -------
     Polars DataFrame with one row per interaction pair, sorted by delta_deviance
     descending (best first).
+
+    Notes
+    -----
+    The ``deviance_aic_*`` and ``deviance_bic_*`` columns use the deviance-based
+    information criteria (D + 2k and D + k*log(n)). Delta values are identical
+    to standard delta-AIC/BIC. Absolute values differ from R's AIC() by a
+    constant (the saturated log-likelihood). See module docstring for details.
     """
     try:
         from glum import GeneralizedLinearRegressor
@@ -210,8 +276,8 @@ def test_interactions(
 
     n = len(X)
     n_params_base = len(base_model.coef_) + 1  # +1 for intercept
-    aic_base = base_deviance + 2 * n_params_base
-    bic_base = base_deviance + np.log(n) * n_params_base
+    deviance_aic_base = base_deviance + 2 * n_params_base
+    deviance_bic_base = base_deviance + np.log(n) * n_params_base
 
     n_tests = len(interaction_pairs)
     bonferroni_threshold = alpha_bonferroni / max(n_tests, 1)
@@ -223,10 +289,9 @@ def test_interactions(
         # Build interaction feature(s)
         X_int = X_pd.copy()
         if feat1 in cat_cols and feat2 in cat_cols:
-            # Categorical x categorical: new combined categorical
-            X_int[f"_ix_{feat1}_{feat2}"] = pd.Categorical(
-                X_pd[feat1].astype(str) + "_X_" + X_pd[feat2].astype(str)
-            )
+            # Categorical x categorical: add proper (L1-1)*(L2-1) interaction
+            # contrast columns (R-style A:B). Main effects stay in X_int already.
+            _add_cat_x_cat_interaction_columns(X_int, X_pd, feat1, feat2)
         elif feat1 in cat_cols:
             # Categorical x continuous: multiply the continuous by each indicator
             for cat_val in X_pd[feat1].cat.categories[1:]:
@@ -252,8 +317,8 @@ def test_interactions(
             lr_p = float(scipy.stats.chi2.sf(lr_chi2, df=lr_df))
 
             n_params_int = len(int_model.coef_) + 1
-            aic_int = int_deviance + 2 * n_params_int
-            bic_int = int_deviance + np.log(n) * n_params_int
+            deviance_aic_int = int_deviance + 2 * n_params_int
+            deviance_bic_int = int_deviance + np.log(n) * n_params_int
 
             results.append(
                 InteractionTestResult(
@@ -265,12 +330,12 @@ def test_interactions(
                     lr_chi2=float(lr_chi2),
                     lr_df=lr_df,
                     lr_p=lr_p,
-                    aic_base=float(aic_base),
-                    aic_interaction=float(aic_int),
-                    delta_aic=float(aic_int - aic_base),
-                    bic_base=float(bic_base),
-                    bic_interaction=float(bic_int),
-                    delta_bic=float(bic_int - bic_base),
+                    deviance_aic_base=float(deviance_aic_base),
+                    deviance_aic_interaction=float(deviance_aic_int),
+                    delta_deviance_aic=float(deviance_aic_int - deviance_aic_base),
+                    deviance_bic_base=float(deviance_bic_base),
+                    deviance_bic_interaction=float(deviance_bic_int),
+                    delta_deviance_bic=float(deviance_bic_int - deviance_bic_base),
                 )
             )
         except Exception:
@@ -290,12 +355,12 @@ def test_interactions(
             "lr_chi2": [r.lr_chi2 for r in results],
             "lr_df": [r.lr_df for r in results],
             "lr_p": [r.lr_p for r in results],
-            "aic_base": [r.aic_base for r in results],
-            "aic_interaction": [r.aic_interaction for r in results],
-            "delta_aic": [r.delta_aic for r in results],
-            "bic_base": [r.bic_base for r in results],
-            "bic_interaction": [r.bic_interaction for r in results],
-            "delta_bic": [r.delta_bic for r in results],
+            "deviance_aic_base": [r.deviance_aic_base for r in results],
+            "deviance_aic_interaction": [r.deviance_aic_interaction for r in results],
+            "delta_deviance_aic": [r.delta_deviance_aic for r in results],
+            "deviance_bic_base": [r.deviance_bic_base for r in results],
+            "deviance_bic_interaction": [r.deviance_bic_interaction for r in results],
+            "delta_deviance_bic": [r.delta_deviance_bic for r in results],
             "recommended": [r.lr_p < bonferroni_threshold for r in results],
         }
     ).sort("delta_deviance", descending=True)
@@ -327,6 +392,12 @@ def build_glm_with_interactions(
     -------
     (fitted_model, comparison_table)
         The fitted glum model and a one-row summary DataFrame.
+
+    Notes
+    -----
+    The ``deviance_aic`` and ``deviance_bic`` columns in the comparison table
+    use the deviance-based information criteria (D + 2k and D + k*log(n)).
+    Delta values are identical to standard delta-AIC/BIC. See module docstring.
     """
     try:
         from glum import GeneralizedLinearRegressor
@@ -360,9 +431,8 @@ def build_glm_with_interactions(
             n_cells = _compute_n_cells(X, feat1, feat2)
             total_new_params += n_cells
             if feat1 in cat_cols and feat2 in cat_cols:
-                X_int[f"_ix_{feat1}_{feat2}"] = pd.Categorical(
-                    X_pd[feat1].astype(str) + "_X_" + X_pd[feat2].astype(str)
-                )
+                # Proper (L1-1)*(L2-1) interaction contrasts — not a combined categorical
+                _add_cat_x_cat_interaction_columns(X_int, X_pd, feat1, feat2)
             elif feat1 in cat_cols:
                 for cat_val in X_pd[feat1].cat.categories[1:]:
                     X_int[f"_ix_{feat1}_{cat_val}_{feat2}"] = (
@@ -390,11 +460,11 @@ def build_glm_with_interactions(
             "model": ["base_glm", "glm_with_interactions"],
             "deviance": [float(base_deviance), float(int_deviance)],
             "n_params": [n_params_base, n_params_int],
-            "aic": [
+            "deviance_aic": [
                 float(base_deviance + 2 * n_params_base),
                 float(int_deviance + 2 * n_params_int),
             ],
-            "bic": [
+            "deviance_bic": [
                 float(base_deviance + np.log(n) * n_params_base),
                 float(int_deviance + np.log(n) * n_params_int),
             ],
