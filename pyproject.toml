@@ -40,7 +40,7 @@ classifiers = [
     "Topic :: Office/Business :: Financial",
 ]
 dependencies = [
-    "numpy>=1.23",
+    "numpy>=1.24",
     "polars>=1.0",
     "scipy>=1.10",
     "glum>=2.7",
