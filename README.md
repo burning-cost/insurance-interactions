@@ -31,7 +31,7 @@ The pipeline has three stages:
 d(i,j) = Σ_s  z_s · min(|W1[s,i]|, |W1[s,j]|)
 ```
 
-where `z_s` is how much first-layer unit `s` influences the output (the product of absolute weight matrices from layer 2 to the output). This gives a ranked list of candidate interactions in milliseconds after training.
+where `z_s` is how much first-layer unit `s` influences the output — computed as the propagated sum of absolute weights from layer 2 to the output (not a matrix product). This gives a ranked list of candidate interactions in milliseconds after training.
 
 **Stage 3 - GLM testing**: For each top-K candidate pair, refit the GLM with the interaction added and compute a likelihood-ratio test statistic. The output table includes deviance improvement, AIC/BIC, p-values (Bonferroni corrected), and `n_cells` — the parameter cost of adding each interaction.
 
@@ -60,8 +60,16 @@ X_train = pl.DataFrame([age_band, vehicle_group, ncd, annual_mileage])
 exposure_train = rng.uniform(0.1, 1.0, size=N)
 base_rate = 0.06
 young_hv = ((age_band == '<25') & (vehicle_group == 'D')).to_numpy().astype(float)
-mu_glm_train = base_rate * exposure_train * (1 + 0.4 * young_hv)  # 'true' GLM without interaction
-y_train = rng.poisson(mu_glm_train)
+
+# True data-generating process: includes the interaction
+mu_true = base_rate * exposure_train * (1 + 0.4 * young_hv)
+y_train = rng.poisson(mu_true)
+
+# GLM baseline: main-effects-only (does NOT know about the interaction).
+# This is the key: the CANN learns the residual between what the GLM predicts
+# and what the data shows. If you pass mu_true as glm_predictions, the CANN
+# sees flat residuals and NID detects nothing.
+mu_glm_train = base_rate * exposure_train  # intercept-only GLM
 
 detector = InteractionDetector(family="poisson")
 detector.fit(
@@ -211,22 +219,16 @@ The deviance improvement is most pronounced when planted interactions have effec
 
 Run `notebooks/benchmark.py` on Databricks to reproduce.
 
-## Related libraries
-
-| Library | Why it's relevant |
-|---------|------------------|
-| [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract rating relativities from GBMs — use the GBM as the benchmark that reveals where the GLM is missing structure |
-| [bayesian-pricing](https://github.com/burning-cost/bayesian-pricing) | Hierarchical Bayesian models for thin rating cells — once interactions are identified, thin interaction cells need partial pooling |
-| [insurance-datasets](https://github.com/burning-cost/insurance-datasets) | Synthetic UK motor and home datasets — use to validate the detector recovers known interaction structure |
-| [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for pricing models — use to assess whether adding interactions improves out-of-sample performance |
-
-[All Burning Cost libraries →](https://burning-cost.github.io)
-
 ## Related Libraries
 
 | Library | What it does |
 |---------|-------------|
-| [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract rating relativities from GBMs — use the GBM benchmark to identify where the GLM is missing structure |
+| [shap-relativities](https://github.com/burning-cost/shap-relativities) | Extract rating relativities from GBMs — use the GBM as the benchmark that reveals where the GLM is missing structure |
+| [bayesian-pricing](https://github.com/burning-cost/bayesian-pricing) | Hierarchical Bayesian models for thin rating cells — once interactions are identified, thin interaction cells need partial pooling |
+| [insurance-datasets](https://github.com/burning-cost/insurance-datasets) | Synthetic UK motor and home datasets — use to validate the detector recovers known interaction structure |
+| [insurance-cv](https://github.com/burning-cost/insurance-cv) | Walk-forward cross-validation for pricing models — use to assess whether adding interactions improves out-of-sample performance |
 | [insurance-causal](https://github.com/burning-cost/insurance-causal) | Double Machine Learning for causal inference — establishes whether detected interactions are genuine causal drivers |
 | [insurance-synthetic](https://github.com/burning-cost/insurance-synthetic) | Synthetic portfolio generation — create datasets with known interaction structure to validate detection |
+
+[All Burning Cost libraries →](https://burning-cost.github.io)
 
