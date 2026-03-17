@@ -39,6 +39,8 @@ Both Poisson (frequency) and Gamma (severity) families are supported.
 
 ## Quickstart
 
+Requires `pip install insurance-interactions[torch]`. The CANN and NID stages use PyTorch.
+
 ```python
 import polars as pl
 import numpy as np
@@ -116,9 +118,15 @@ The `n_cells` column is important for credibility decisions: a strong interactio
 
 ## Installation
 
+The core package does not include PyTorch (the CANN + NID pipeline requires it).
+Install with the torch extra to use `InteractionDetector`:
+
 ```bash
-uv add insurance-interactions
+uv add "insurance-interactions[torch]"
 ```
+
+Without torch, only the GLM testing functions (`test_interactions`, `build_glm_with_interactions`)
+and NID scoring utilities are available.
 
 With SHAP interaction validation (requires CatBoost):
 
