@@ -134,6 +134,8 @@ With SHAP interaction validation (requires CatBoost):
 uv add "insurance-interactions[shap]"
 ```
 
+> 💬 Questions or feedback? Start a [Discussion](https://github.com/burning-cost/insurance-interactions/discussions). Found it useful? A ⭐ helps others find it.
+
 ## Configuration
 
 Training is controlled via `DetectorConfig`:
