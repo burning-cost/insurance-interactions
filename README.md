@@ -39,7 +39,7 @@ Both Poisson (frequency) and Gamma (severity) families are supported.
 
 ## Quickstart
 
-Requires `pip install insurance-interactions[torch]`. The CANN and NID stages use PyTorch.
+Requires `uv add "insurance-interactions[torch]"`. The CANN and NID stages use PyTorch.
 
 ```python
 import polars as pl
