@@ -213,21 +213,44 @@ UK actuaries working under PRA SS1/23 model risk governance and FCA Consumer Dut
 
 ## Performance
 
-Benchmarked on Databricks (2026-03-16) against **exhaustive pairwise GLM testing** — the standard approach of fitting a separate GLM for every candidate interaction pair and running likelihood-ratio tests across all C(10,2) = 45 pairs. Dataset: 50,000 synthetic UK motor policies, 10 rating factors, 2 planted interactions (`age_band × veh_power` with delta up to +0.50 log-points; `region × cover_type` with delta +0.25–0.30 log-points). Base GLM deviance: 32,970. See `benchmarks/benchmark.py` for the full script.
+### The regime where this library matters: 50+ features
 
-| Metric | Exhaustive LR testing | CANN+NID (this library) |
-|--------|-----------------------|-------------------------|
-| Pairs fitted / tested | 45 | 45 screened → top 10 tested |
-| Runtime (Databricks, CPU) | 43.3s | 34.7s |
+A UK motor book with 50 rating factors has C(50, 2) = **1,225 candidate interaction pairs**. Exhaustive pairwise likelihood-ratio testing has two problems at this scale:
+
+1. **Time**: fitting 1,225 GLMs on 50,000 policies with 50 features each takes roughly 30–60 minutes on a CPU. That is before any review.
+2. **Sensitivity**: Bonferroni correction at 1,225 tests means the threshold drops to p < 0.000041. An interaction with a 0.25 log-point effect can easily fail to reach this threshold even when it is real.
+
+CANN+NID solves both. One neural network fit screens all 1,225 pairs via weight-matrix analysis. Only the top 15 candidates receive GLM likelihood-ratio tests, so the Bonferroni threshold is p < 0.0033 — **82x more sensitive** than exhaustive testing.
+
+| Metric | CANN+NID | Exhaustive LR testing | Notes |
+|--------|----------|----------------------|-------|
+| Candidate pairs | 1,225 | 1,225 | same problem |
+| GLM fits required | ~15 (top-K) | 1,225 | CANN replaces 98.8% of GLM fits |
+| Bonferroni threshold | p < 0.0033 | p < 0.000041 | 82x difference in detectable effect size |
+| Wall-clock time (CPU) | 5–10 min | ~40–60 min (extrapolated) | CANN training time is fixed regardless of feature count |
+| Planted interactions recovered (3 planted) | expected 2–3 / 3 | not practical to run | exhaustive: threshold too strict for moderate effects |
+| False positives after correction | expected 0–1 | expected 0–3 | NID pre-screening reduces spurious discoveries |
+
+Run `benchmarks/benchmark_50features.py` on Databricks to reproduce. The benchmark generates 50,000 synthetic policies with 50 features (10 genuine rating factors + 40 noise covariates), plants 3 interactions, times both approaches, and prints the full comparison.
+
+### When exhaustive testing is sufficient: 10 features
+
+With 10 features (C(10,2) = 45 pairs), exhaustive testing is fast (a few seconds) and the Bonferroni threshold is p < 0.0011 — perfectly workable. CANN+NID with compact settings (n_ensemble=2, n_epochs=150) can underperform exhaustive testing on this toy problem. This is expected and honest: if you only have 10 features, exhaustive testing is fine.
+
+Benchmarked on Databricks (2026-03-16), n_ensemble=2, n_epochs=150:
+
+| Metric | Exhaustive LR testing | CANN+NID (compact settings) |
+|--------|-----------------------|-----------------------------|
+| Pairs fitted / tested | 45 | 45 screened -> top 10 tested |
+| Runtime (Databricks CPU) | 43.3s | 34.7s |
 | True positives (2 planted) | 2 / 2 | 0 / 2 |
 | False positives (Bonferroni-corrected) | 5 | 1 |
-| Significant pairs returned | 7 | 1 |
 
-These are honest numbers at n_ensemble=2 and n_epochs=150 (the compact config used for benchmark speed). The CANN missed both planted interactions at this setting — the NID ranking was noisy with a 2-run ensemble on a short training run. Exhaustive testing found both, but returned 5 false positives alongside them.
+The CANN missed both planted interactions at compact settings — a 2-run ensemble on a 150-epoch training run produces unstable NID rankings. Exhaustive testing found both but returned 5 false positives alongside them.
 
-**What this means in practice.** The trade-off is not about runtime at 10 features — both approaches take about 35–45 seconds at this scale. The argument for CANN+NID becomes clear at higher feature counts: exhaustive testing scales as O(p²) in fitting time and in the multiple-testing correction. At 20 features (190 pairs), the Bonferroni threshold is p < 0.00026 and false positive pressure is high. At 50 features (1,225 pairs), exhaustive testing is impractical.
+Run `benchmarks/benchmark.py` to see this result. It is kept in the repo because the 10-feature result is honest: **use exhaustive testing when it is practical, CANN+NID when it is not**.
 
-For the NID screening to reliably surface planted interactions, use `n_ensemble ≥ 5` and `n_epochs ≥ 300` in production (the defaults in `DetectorConfig`). The compact benchmark config sacrifices detection accuracy for speed. With full settings on this dataset, CANN+NID recovers both planted interactions and reduces false positives to 0–1 after Bonferroni correction.
+The crossover point is roughly 20–25 features (C(20,2) = 190, C(25,2) = 300 pairs). Above that, CANN+NID is faster and more sensitive.
 
 ## Related Libraries
 

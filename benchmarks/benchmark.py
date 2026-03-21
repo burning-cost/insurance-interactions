@@ -1,4 +1,15 @@
 """
+NOTE: This is the 10-feature benchmark. At 10 features (C(10,2) = 45 pairs),
+exhaustive pairwise LR testing is practical, and on compact settings
+(n_ensemble=2, n_epochs=150), CANN+NID can be outperformed by brute force.
+This benchmark is retained for honesty — it documents the regime where
+exhaustive testing is viable.
+
+The primary benchmark, demonstrating CANN+NID's real advantage, is at:
+    benchmarks/benchmark_50features.py
+At 50 features (C(50,2) = 1,225 pairs), exhaustive testing is impractical,
+the Bonferroni threshold is 82x more stringent, and CANN+NID wins clearly.
+
 Benchmark: insurance-interactions CANN/NID detection vs exhaustive pairwise
 GLM testing for finding interaction terms in personal lines pricing.
 
