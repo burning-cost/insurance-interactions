@@ -7,7 +7,7 @@ name = "insurance-interactions"
 version = "0.1.5"
 description = "Automated GLM interaction detection for UK personal lines insurance using CANN + NID"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "Burning Cost", email = "pricing.frontier@gmail.com" },
