@@ -12,6 +12,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+pytest.importorskip("torch", reason="torch not installed")
+
 from insurance_interactions.cann import CANN, CANNConfig
 from insurance_interactions.nid import (
     InteractionScore,

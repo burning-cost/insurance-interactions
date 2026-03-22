@@ -6,6 +6,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+pytest.importorskip("torch", reason="torch not installed — InteractionDetector requires torch")
+
 from insurance_interactions import DetectorConfig, InteractionDetector
 
 

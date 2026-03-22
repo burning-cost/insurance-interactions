@@ -15,6 +15,8 @@ import numpy as np
 import pytest
 import polars as pl
 
+torch = pytest.importorskip("torch", reason="torch not installed")
+
 from insurance_interactions.cann import (
     CANN,
     CANNConfig,
@@ -22,7 +24,6 @@ from insurance_interactions.cann import (
     _poisson_deviance,
     _gamma_deviance,
 )
-import torch
 
 
 class TestDeviceLossFunctions:
