@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insurance-interactions"
-version = "0.1.5"
+version = "0.1.6"
 description = "Automated GLM interaction detection for UK personal lines insurance using CANN + NID"
 readme = "README.md"
 license = "MIT"

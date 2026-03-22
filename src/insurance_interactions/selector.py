@@ -67,6 +67,39 @@ class DetectorConfig:
     glm_l2: float = 0.0
     alpha_bonferroni: float = 0.05
 
+    def __post_init__(self) -> None:
+        _VALID_ACTIVATIONS = {"tanh", "relu"}
+        if self.cann_activation not in _VALID_ACTIVATIONS:
+            raise ValueError(
+                f"cann_activation must be one of {_VALID_ACTIVATIONS}, "
+                f"got '{self.cann_activation}'"
+            )
+        if self.top_k_nid <= 0:
+            raise ValueError(
+                f"top_k_nid must be > 0, got {self.top_k_nid}"
+            )
+        if self.top_k_final <= 0:
+            raise ValueError(
+                f"top_k_final must be > 0, got {self.top_k_final}"
+            )
+        if not (0.0 < self.cann_validation_fraction < 1.0):
+            raise ValueError(
+                f"cann_validation_fraction must be strictly between 0 and 1, "
+                f"got {self.cann_validation_fraction}"
+            )
+        if self.cann_n_ensemble <= 0:
+            raise ValueError(
+                f"cann_n_ensemble must be > 0, got {self.cann_n_ensemble}"
+            )
+        if self.nid_max_order not in (2, 3):
+            raise ValueError(
+                f"nid_max_order must be 2 or 3, got {self.nid_max_order}"
+            )
+        if self.cann_n_epochs <= 0:
+            raise ValueError(
+                f"cann_n_epochs must be > 0, got {self.cann_n_epochs}"
+            )
+
 
 class InteractionDetector:
     """Automated GLM interaction detector using CANN + NID.
@@ -185,9 +218,14 @@ class InteractionDetector:
                     feature_names=self._cann.feature_names,
                 )
                 shap_results = shap_to_dataframe(shap_scores)
-            except Exception as exc:
+            except (ImportError, AttributeError, ValueError, RuntimeError) as exc:
                 import warnings
-                warnings.warn(f"SHAP interaction computation failed: {exc}. Proceeding without SHAP scores.")
+                warnings.warn(
+                    f"SHAP interaction computation failed: {type(exc).__name__}: {exc}. "
+                    "Proceeding without SHAP scores.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         # Step 4: GLM testing of top-K NID pairs (pairwise only)
         if cfg.nid_max_order == 2:
