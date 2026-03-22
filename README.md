@@ -203,9 +203,18 @@ The GLM prediction enters as a fixed log-space offset. The output layer of the n
 
 UK actuaries working under PRA SS1/23 model risk governance and FCA Consumer Duty pricing rules need interaction decisions to be auditable. This library is designed to support that: it produces a ranked table with test statistics, not a black-box model. The actuary decides which interactions to add; the library provides the shortlist and the evidence.
 
-## Databricks Notebook
+## Databricks Notebooks
 
-[`insurance_interactions_demo.py`](https://github.com/burning-cost/burning-cost-examples/blob/main/notebooks/insurance_interactions_demo.py) walks through the full CANN + NID + GLM testing pipeline end-to-end: a synthetic UK motor portfolio with two planted interactions, CANN training with ensemble averaging, NID ranking, likelihood-ratio testing with Bonferroni correction, and a final refitted GLM comparison table. It is the fastest way to see all three stages working together on realistic data before wiring in your own GLM predictions and rating factor DataFrame.
+[`databricks/benchmark.py`](databricks/benchmark.py) — the definitive benchmark:
+CANN+NID vs exhaustive LR testing vs main-effects-only GLM on 15,000 synthetic UK motor
+policies with 10 rating factors and 3 planted interactions (strong, moderate, and weak).
+Measures out-of-sample Poisson deviance, interaction recovery, and projects the time
+saving at scale (10 to 50 features). Run this first to understand what the library does
+and does not deliver.
+
+[`insurance_interactions_demo.py`](https://github.com/burning-cost/burning-cost-examples/blob/main/notebooks/insurance_interactions_demo.py) — the workflow demo:
+the full CANN + NID + GLM testing pipeline end-to-end on a simpler 5-feature dataset.
+Good for understanding the API before running the benchmark.
 
 ## Read more
 
