@@ -78,4 +78,9 @@ __all__ = [
     "build_glm_with_interactions",
 ]
 
-__version__ = "0.1.5"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("insurance-interactions")
+except PackageNotFoundError:
+    __version__ = "0.0.0"  # not installed

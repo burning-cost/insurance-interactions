@@ -694,13 +694,15 @@ wheels = [
 
 [[package]]
 name = "insurance-interactions"
-version = "0.1.1"
+version = "0.1.5"
 source = { editable = "." }
 dependencies = [
     { name = "glum" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "packaging" },
     { name = "polars" },
+    { name = "pyarrow" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
@@ -728,12 +730,14 @@ requires-dist = [
     { name = "catboost", marker = "extra == 'shap'", specifier = ">=1.2" },
     { name = "glum", specifier = ">=2.7" },
     { name = "matplotlib", marker = "extra == 'plots'", specifier = ">=3.7" },
-    { name = "numpy", specifier = ">=1.25" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "packaging", specifier = ">=26.0" },
     { name = "polars", specifier = ">=1.0" },
+    { name = "pyarrow", specifier = ">=23.0.1" },
     { name = "pyarrow", marker = "extra == 'dev'", specifier = ">=12.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
-    { name = "scipy", specifier = ">=1.11" },
+    { name = "scipy", specifier = ">=1.10" },
     { name = "shapiq", marker = "extra == 'shap'", specifier = ">=0.1" },
     { name = "torch", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "torch", marker = "extra == 'torch'", specifier = ">=2.0" },
