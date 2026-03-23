@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.7] - 2026-03-23
+
+### Fixed
+- Bumped numpy minimum version from >=1.24 to >=1.25 to ensure compatibility with scipy's use of numpy.exceptions (added in numpy 1.25)
+
+
 ## v0.1.5 (2026-03-22) [unreleased]
 - fix: skip torch-dependent tests gracefully; drop unused packaging dep
 - fix: use plain string license field for universal setuptools compatibility
