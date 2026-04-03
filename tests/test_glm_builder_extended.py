@@ -263,7 +263,8 @@ class TestTestInteractionsExtended:
         assert not result.is_empty()
 
     def test_bonferroni_threshold_applied(self):
-        """With alpha=1.0 all pairs should be recommended; with alpha=1e-10 none should."""
+        """With alpha=1.0 all pairs should be recommended; with pure noise data
+        and alpha=1e-10 none should."""
         X, y, exposure = _make_gamma_df()
         result_all = run_interaction_tests(
             X=X,
@@ -273,13 +274,23 @@ class TestTestInteractionsExtended:
             family="poisson",
             alpha_bonferroni=1.0,  # trivially significant
         )
+        # For the strict-threshold test we use data with NO interaction so that
+        # lr_p is genuinely large (not underflowed to 0.0 due to very strong signal).
+        rng_noise = np.random.default_rng(999)
+        n_noise = 200
+        X_noise = pl.DataFrame({
+            "grp_a": pl.Series(rng_noise.choice(["x", "y"], size=n_noise)).cast(pl.String),
+            "grp_b": pl.Series(rng_noise.choice(["p", "q"], size=n_noise)).cast(pl.String),
+        })
+        y_noise = rng_noise.poisson(1.0, n_noise).astype(np.float64)
+        exp_noise = np.ones(n_noise, dtype=np.float64)
         result_none = run_interaction_tests(
-            X=X,
-            y=y,
-            exposure=exposure,
-            interaction_pairs=[("age_band", "vehicle_group")],
+            X=X_noise,
+            y=y_noise,
+            exposure=exp_noise,
+            interaction_pairs=[("grp_a", "grp_b")],
             family="poisson",
-            alpha_bonferroni=1e-300,  # impossibly strict
+            alpha_bonferroni=1e-10,  # very strict; noise interaction won't pass
         )
         if not result_all.is_empty():
             assert bool(result_all["recommended"][0]) is True
